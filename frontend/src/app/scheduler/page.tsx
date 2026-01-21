@@ -71,8 +71,12 @@ export default function SchedulerPage() {
                     <p className="text-slate-500 mt-1">Manage your content calendar</p>
                 </div>
                 <button
-                    onClick={() => setIsModalOpen(true)}
-                    className="btn-primary flex items-center shadow-lg shadow-blue-500/30"
+                    type="button"
+                    onClick={() => {
+                        console.log("Create Post clicked");
+                        setIsModalOpen(true);
+                    }}
+                    className="btn-primary flex items-center shadow-lg shadow-blue-500/30 cursor-pointer"
                 >
                     <Plus size={20} className="mr-2" />
                     Create Post
@@ -132,7 +136,7 @@ export default function SchedulerPage() {
 
             {/* Create Post Modal */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <h2 className="text-xl font-bold text-slate-800">Create AI Post</h2>
