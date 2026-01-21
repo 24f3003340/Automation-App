@@ -73,10 +73,10 @@ export default function SchedulerPage() {
                 <button
                     type="button"
                     onClick={() => {
-                        console.log("Create Post clicked");
+                        alert("Button Clicked!");
                         setIsModalOpen(true);
                     }}
-                    className="btn-primary flex items-center shadow-lg shadow-blue-500/30 cursor-pointer"
+                    className="btn-primary flex items-center shadow-lg shadow-blue-500/30 cursor-pointer relative z-50 hover:scale-105 active:scale-95"
                 >
                     <Plus size={20} className="mr-2" />
                     Create Post
