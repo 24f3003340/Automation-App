@@ -67,6 +67,12 @@ export default function SchedulerPage() {
         <div className="space-y-6 relative">
             <div className="flex justify-between items-center">
                 <div>
+                    <button
+                        onClick={() => alert("DEBUG CLICK WORKS")}
+                        className="fixed top-4 right-4 z-[99999] bg-red-600 text-white p-4 font-bold rounded-full shadow-2xl animate-pulse"
+                    >
+                        DEBUG CLICK (TEST ME)
+                    </button>
                     <h1 className="text-3xl font-bold text-slate-900">Smart Scheduler</h1>
                     <p className="text-slate-500 mt-1">Manage your content calendar</p>
                 </div>
