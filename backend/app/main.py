@@ -8,11 +8,8 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="BizMate API", description="Backend for BizMate SaaS", version="1.0.0")
 
-# CORS Setup
-origins = [
-    "http://localhost:3000",  # Frontend
-    "http://127.0.0.1:3000",
-]
+# CORS Setup - Allow all for production
+# origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
