@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, PenTool, Calendar, MessageSquare, Settings, LogOut, X } from 'lucide-react';
+import { LayoutDashboard, PenTool, Calendar, MessageSquare, Settings, LogOut, X, CreditCard } from 'lucide-react';
 
 const menuItems = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Marketing Studio', href: '/marketing', icon: PenTool },
     { name: 'Smart Scheduler', href: '/scheduler', icon: Calendar },
     { name: 'Sales Agent', href: '/chatbot', icon: MessageSquare },
+    { name: 'Pricing', href: '/pricing', icon: CreditCard },
     { name: 'Settings', href: '/settings', icon: Settings },
 ];
 

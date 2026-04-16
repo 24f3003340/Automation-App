@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Calendar as CalendarIcon, Clock, MoreVertical, Edit2, Trash2, Plus, Sparkles, X, Loader2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { Clock, Plus, Sparkles, X, Loader2, Edit2, Trash2 } from 'lucide-react';
+import { Calendar as BigCalendar, momentLocalizer } from 'react-big-calendar';
+import moment from 'moment';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api';
+
+const localizer = momentLocalizer(moment);
 
 export default function SchedulerPage() {
     const router = useRouter();
@@ -21,13 +25,19 @@ export default function SchedulerPage() {
     const [generatedContent, setGeneratedContent] = useState('');
 
     useEffect(() => {
-        fetchPosts();
-    }, []);
+        const token = localStorage.getItem('token');
+        if (!token) {
+            router.push('/auth/login');
+            return;
+        }
+        fetchPosts(token);
+    }, [router]);
 
-    const fetchPosts = async () => {
+    const fetchPosts = async (token: string) => {
         try {
-            // Fetch from our new endpoint
-            const response = await axios.get(`${API_BASE_URL}/posts`);
+            const response = await axios.get(`${API_BASE_URL}/scheduler/posts`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setPosts(response.data);
         } catch (err) {
             console.error("Failed to fetch posts", err);
@@ -40,19 +50,54 @@ export default function SchedulerPage() {
         if (!topic) return;
         setGenerating(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/generate-post`, {
+            const token = localStorage.getItem('token');
+            // Since we moved generation to marketing, we use it to get a quick post
+            const response = await axios.post(`${API_BASE_URL}/marketing/generate`, {
                 topic,
-                platform,
                 tone
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
             });
             setGeneratedContent(response.data.content);
-            // Refresh posts list to show the new one immediately
-            fetchPosts();
         } catch (err) {
             console.error("Generation failed", err);
-            alert("Failed to generate post");
+            alert("Failed to generate post. Check API key.");
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const handleSavePost = async () => {
+        try {
+            const token = localStorage.getItem('token');
+            await axios.post(`${API_BASE_URL}/scheduler/posts`, {
+                title: topic || "Generated Post",
+                content: generatedContent,
+                platform: platform,
+                status: "scheduled",
+                scheduled_time: new Date().toISOString()
+            }, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            fetchPosts(token || '');
+            closeModal();
+        } catch (err) {
+            console.error(err);
+            alert("Failed to save scheduled post.");
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        if(!confirm("Are you sure?")) return;
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_BASE_URL}/scheduler/posts/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setPosts(posts.filter(p => p.id !== id));
+        } catch (err) {
+            console.error(err);
         }
     };
 
@@ -63,12 +108,24 @@ export default function SchedulerPage() {
         setGeneratedContent('');
     };
 
+    // Map posts to calendar events
+    const calendarEvents = posts
+        .filter(p => p.status === 'scheduled' || p.scheduled_time)
+        .map(p => ({
+            id: p.id,
+            title: `[${p.platform}] ${p.title}`,
+            start: new Date(p.scheduled_time || p.created_at),
+            end: new Date(new Date(p.scheduled_time || p.created_at).getTime() + 60 * 60 * 1000), // 1 hour duration
+            allDay: false,
+            resource: p
+        }));
+
     return (
         <div className="space-y-6 relative">
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-900">Smart Scheduler</h1>
-                    <p className="text-slate-500 mt-1">Manage your content calendar</p>
+                    <p className="text-slate-500 mt-1">Manage your content calendar visually</p>
                 </div>
                 <button
                     type="button"
@@ -80,54 +137,30 @@ export default function SchedulerPage() {
                 </button>
             </div>
 
-            {/* Posts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-4">
-                    <h3 className="font-bold text-slate-800 text-lg">Upcoming Posts</h3>
-
-                    {loading ? (
-                        <div className="text-center py-10 text-slate-400">Loading...</div>
-                    ) : posts.length === 0 ? (
-                        <div className="card-base p-10 text-center text-slate-500 bg-slate-50 border-dashed">
-                            No posts yet. Click "Create Post" to start!
-                        </div>
-                    ) : (
-                        posts.map((post: any) => (
-                            <div key={post.id} className="card-base p-5 flex items-start hover:shadow-md transition-shadow cursor-pointer">
-                                <div className={`w-2 h-full rounded-full mr-4 self-stretch
-                                    ${post.status === 'scheduled' ? 'bg-blue-500' : 'bg-slate-300'}`}
-                                ></div>
-
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <h4 className="font-bold text-slate-800 line-clamp-1">{post.title}</h4>
-                                            <span className="inline-flex items-center text-xs font-medium text-slate-500 mt-1 bg-slate-100 px-2 py-0.5 rounded">
-                                                {post.platform}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    <p className="text-slate-600 text-sm mt-2 line-clamp-3 whitespace-pre-wrap">{post.content}</p>
-
-                                    <div className="mt-3 flex items-center gap-2">
-                                        <span className="text-xs text-slate-400 font-mono bg-slate-50 px-2 py-1 rounded">Draft</span>
-                                    </div>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-
-                {/* Calendar Placeholder */}
-                <div>
-                    <div className="card-base bg-gradient-to-br from-slate-900 to-slate-800 text-white border-none">
-                        <h3 className="font-bold text-lg mb-4">Calendar View</h3>
-                        <div className="bg-white/10 rounded-lg p-4 text-center">
-                            <CalendarIcon size={48} className="mx-auto text-blue-400 mb-2 opacity-50" />
-                            <p className="text-sm text-slate-300">Calendar widget coming soon</p>
-                        </div>
-                    </div>
+            {/* Main view container */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <style>{`
+                    .rbc-calendar { font-family: inherit; }
+                    .rbc-event { background-color: #3b82f6; border: none; border-radius: 6px; }
+                    .rbc-today { background-color: #eff6ff; }
+                    .rbc-toolbar button { border-radius: 6px; padding: 6px 12px; }
+                    .rbc-toolbar button.rbc-active { background-color: #3b82f6; color: white; border-color: #3b82f6; box-shadow: none; }
+                `}</style>
+                <div style={{ height: 600 }}>
+                    <BigCalendar
+                        localizer={localizer}
+                        events={calendarEvents}
+                        startAccessor="start"
+                        endAccessor="end"
+                        views={['month', 'week', 'day', 'agenda']}
+                        defaultView="month"
+                        onSelectEvent={(event: any) => {
+                            if(confirm(`Would you like to delete "${event.title}"?`)) {
+                                handleDelete(event.id);
+                            }
+                        }}
+                        tooltipAccessor={(event: any) => event.resource.content}
+                    />
                 </div>
             </div>
 
@@ -205,21 +238,21 @@ export default function SchedulerPage() {
                                     <label className="block text-sm font-medium text-emerald-600 mb-2 flex items-center">
                                         <Sparkles size={16} className="mr-1" /> AI Result:
                                     </label>
-                                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-slate-700 text-sm whitespace-pre-wrap">
+                                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 text-slate-700 text-sm whitespace-pre-wrap max-h-40 overflow-y-auto">
                                         {generatedContent}
                                     </div>
                                     <div className="flex gap-3 mt-4">
                                         <button
-                                            onClick={closeModal}
+                                            onClick={handleSavePost}
                                             className="btn-primary flex-1 bg-emerald-600 hover:bg-emerald-700 border-none"
                                         >
-                                            Save & Close
+                                            Schedule To Calendar
                                         </button>
                                         <button
                                             onClick={() => setGeneratedContent('')}
                                             className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-medium text-sm"
                                         >
-                                            Try Again
+                                            Discard
                                         </button>
                                     </div>
                                 </div>

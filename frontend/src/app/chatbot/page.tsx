@@ -2,17 +2,20 @@
 
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Send, User, Bot } from 'lucide-react';
+import { Send, User, Bot, MessageSquare, Plus, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { API_BASE_URL } from '@/lib/api';
+import { format } from 'date-fns';
 
 export default function ChatbotPage() {
     const router = useRouter();
-    const [messages, setMessages] = useState<any[]>([
-        { id: 1, sender: 'bot', content: 'Hello! I am your AI Sales Agent. How can I help you today?' }
-    ]);
+    const [messages, setMessages] = useState<any[]>([]);
+    const [history, setHistory] = useState<any[]>([]);
+    const [selectedConvId, setSelectedConvId] = useState<number | null>(null);
+
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [historyLoading, setHistoryLoading] = useState(true);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -25,8 +28,45 @@ export default function ChatbotPage() {
             router.push('/auth/login');
             return;
         }
+        fetchHistory(token);
+    }, [router]);
+
+    useEffect(() => {
         scrollToBottom();
-    }, [messages, router]);
+    }, [messages]);
+
+    const fetchHistory = async (token: string) => {
+        try {
+            const res = await axios.get(`${API_BASE_URL}/chatbot/history`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setHistory(res.data);
+            if (res.data.length > 0 && !selectedConvId) {
+                selectConversation(res.data[0]);
+            } else if (res.data.length === 0) {
+                setMessages([{ id: 1, sender: 'bot', content: 'Hello! I am your AI Sales Agent. How can I help you today?' }]);
+            }
+        } catch (err) {
+            console.error("Failed to load history", err);
+        } finally {
+            setHistoryLoading(false);
+        }
+    };
+
+    const selectConversation = (conv: any) => {
+        setSelectedConvId(conv.id);
+        const formattedMessages = conv.messages.map((m: any) => ({
+            id: m.id,
+            sender: m.sender,
+            content: m.content
+        }));
+        setMessages(formattedMessages);
+    };
+
+    const startNewChat = () => {
+        setSelectedConvId(null);
+        setMessages([{ id: Date.now(), sender: 'bot', content: 'Hello! Let\'s start a new simulated conversation. How can I help you?' }]);
+    };
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -39,10 +79,10 @@ export default function ChatbotPage() {
 
         try {
             const token = localStorage.getItem('token');
-
             const response = await axios.post(`${API_BASE_URL}/chatbot/send`, {
                 content: userMessage.content,
-                platform: 'Web Simulation'
+                platform: 'Web Simulation',
+                conversation_id: selectedConvId
             }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -53,6 +93,14 @@ export default function ChatbotPage() {
                 content: response.data.reply
             };
             setMessages(prev => [...prev, botMessage]);
+            
+            // If new conversation, we got an ID back
+            if (!selectedConvId && response.data.conversation_id) {
+                setSelectedConvId(response.data.conversation_id);
+                // Background refresh history
+                axios.get(`${API_BASE_URL}/chatbot/history`, { headers: { Authorization: `Bearer ${token}` } })
+                     .then(res => setHistory(res.data));
+            }
 
         } catch (err: any) {
             console.error("Chat error", err);
@@ -69,14 +117,46 @@ export default function ChatbotPage() {
     };
 
     return (
-        <div className="h-[calc(100vh-8rem)] flex flex-col">
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-slate-900">Sales Agent Simulator</h1>
-                <p className="text-slate-500 mt-1">Test how your AI replies to customers</p>
+        <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-6">
+            {/* Sidebar for History */}
+            <div className="w-full md:w-80 h-full card-base p-4 flex flex-col bg-white border-0 shadow-lg shrink-0">
+                <button
+                    onClick={startNewChat}
+                    className="w-full btn-primary flex items-center justify-center mb-6"
+                >
+                    <Plus size={18} className="mr-2" /> New Chat
+                </button>
+                <div className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 pl-2">Recent Simulations</div>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                    {historyLoading ? (
+                        <div className="flex justify-center p-4"><Loader2 className="animate-spin text-slate-400" /></div>
+                    ) : history.length === 0 ? (
+                        <div className="text-sm text-slate-500 p-2 text-center">No history yet.</div>
+                    ) : history.map((conv) => (
+                        <div 
+                            key={conv.id} 
+                            onClick={() => selectConversation(conv)}
+                            className={`p-3 rounded-xl cursor-pointer transition-colors ${selectedConvId === conv.id ? 'bg-blue-50 border border-blue-100' : 'hover:bg-slate-50'}`}
+                        >
+                            <div className="flex items-center text-sm font-bold text-slate-800 line-clamp-1">
+                                <MessageSquare size={14} className="mr-2 text-slate-400 shrink-0" />
+                                {conv.customer_name}
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1 pl-6 truncate">
+                                {conv.last_message || "Started..."}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
 
-            <div className="card-base flex-1 flex flex-col p-0 overflow-hidden border-0 shadow-xl bg-slate-50">
-                {/* Chat Area */}
+            {/* Main Chat Area */}
+            <div className="flex-1 card-base flex flex-col p-0 overflow-hidden border-0 shadow-xl bg-slate-50 h-full">
+                <div className="px-6 py-4 border-b border-slate-200 bg-white">
+                    <h2 className="text-lg font-bold text-slate-800">Agent Simulator</h2>
+                    <p className="text-xs text-slate-500">Testing your AI sales bot behavior</p>
+                </div>
+
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
                     {messages.map((msg) => (
                         <div
@@ -90,11 +170,11 @@ export default function ChatbotPage() {
                             )}
 
                             <div className={`max-w-[80%] rounded-2xl px-5 py-3.5 shadow-sm
-                ${msg.sender === 'user'
+                                ${msg.sender === 'user'
                                     ? 'bg-blue-600 text-white rounded-br-sm'
                                     : 'bg-white text-slate-700 rounded-bl-sm border border-slate-100'}
-              `}>
-                                <p className="text-sm leading-relaxed">{msg.content}</p>
+                            `}>
+                                <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                             </div>
 
                             {msg.sender === 'user' && (
@@ -107,7 +187,6 @@ export default function ChatbotPage() {
                     <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Area */}
                 <div className="p-4 bg-white border-t border-slate-200">
                     <form onSubmit={handleSend} className="flex gap-4">
                         <input
@@ -116,13 +195,14 @@ export default function ChatbotPage() {
                             value={input}
                             onChange={(e) => setInput(e.target.value)}
                             disabled={loading}
+                            autoFocus
                         />
                         <button
                             type="submit"
-                            className="btn-primary w-12 h-12 rounded-xl flex items-center justify-center p-0"
+                            className="btn-primary w-12 h-12 rounded-xl flex items-center justify-center p-0 shrink-0"
                             disabled={loading}
                         >
-                            <Send size={20} className={loading ? 'opacity-50' : ''} />
+                            {loading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
                         </button>
                     </form>
                 </div>

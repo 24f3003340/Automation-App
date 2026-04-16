@@ -43,10 +43,36 @@ router = APIRouter(
 class MessageBase(BaseModel):
     content: str
     platform: str = "Web"
+    conversation_id: Optional[int] = None
 
 class ChatResponse(BaseModel):
     reply: str
     author: str = "BizMate Bot"
+    conversation_id: int
+
+class MessageResponse(BaseModel):
+    id: int
+    sender: str
+    content: str
+    timestamp: datetime
+    class Config:
+        orm_mode = True
+
+class ConversationResponse(BaseModel):
+    id: int
+    customer_name: str
+    updated_at: datetime
+    messages: List[MessageResponse] = []
+    class Config:
+        orm_mode = True
+
+@router.get("/history", response_model=List[ConversationResponse])
+def get_history(
+    current_user: models.User = Depends(auth.get_current_user),
+    db: Session = Depends(database.get_db)
+):
+    history = db.query(models.Conversation).filter(models.Conversation.user_id == current_user.id).order_by(models.Conversation.updated_at.desc()).all()
+    return history
 
 @router.post("/send", response_model=ChatResponse)
 async def send_message(
@@ -84,7 +110,36 @@ async def send_message(
         response = model.generate_content(prompt)
         reply_text = response.text
         
-        return ChatResponse(reply=reply_text)
+        # Database Save Logic
+        conversation = None
+        if message.conversation_id:
+            conversation = db.query(models.Conversation).filter(models.Conversation.id == message.conversation_id, models.Conversation.user_id == current_user.id).first()
+            
+        if not conversation:
+            # Create new conversation
+            conversation = models.Conversation(
+                user_id=current_user.id,
+                customer_name="Guest (Web Simulation)",
+                platform=message.platform,
+                last_message=message.content
+            )
+            db.add(conversation)
+            db.commit()
+            db.refresh(conversation)
+            
+        else:
+            conversation.last_message = message.content
+            conversation.updated_at = datetime.utcnow()
+            
+        # Add User Message
+        user_msg = models.Message(conversation_id=conversation.id, sender="user", content=message.content)
+        bot_msg = models.Message(conversation_id=conversation.id, sender="bot", content=reply_text)
+        
+        db.add(user_msg)
+        db.add(bot_msg)
+        db.commit()
+        
+        return ChatResponse(reply=reply_text, conversation_id=conversation.id)
         
     except Exception as e:
         import traceback
